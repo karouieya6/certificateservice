@@ -2,10 +2,15 @@ package com.example.certificateservice.controller;
 
 import com.example.certificateservice.dto.CertificateRequest;
 import com.example.certificateservice.dto.CertificateResponse;
+import com.example.certificateservice.repository.CertificateRepository;
 import com.example.certificateservice.service.CertificateService;
+import com.example.certificateservice.util.JwtUtil;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -14,13 +19,12 @@ import java.util.List;
 @RequestMapping("/api/certificates")
 @RequiredArgsConstructor
 public class CertificateController {
-
+    @Autowired
+    private CertificateRepository certificateRepository;
     private final CertificateService certificateService;
+    private final JwtUtil jwtUtil;
 
-    @PostMapping
-    public ResponseEntity<CertificateResponse> generateCertificate(@RequestBody CertificateRequest request) {
-        return ResponseEntity.ok(certificateService.generateCertificate(request));
-    }
+
 
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<CertificateResponse>> getCertificatesByUser(@PathVariable Long userId) {
@@ -31,4 +35,23 @@ public class CertificateController {
     public ResponseEntity<Resource> downloadCertificate(@PathVariable Long id) {
         return certificateService.downloadCertificate(id);
     }
+    @GetMapping("/user/{userId}/count")
+    public long countCertificatesByUser(@PathVariable Long userId) {
+        return certificateRepository.countByUserId(userId);
+    }
+    @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
+    public ResponseEntity<CertificateResponse> generateCertificate(
+            @RequestBody CertificateRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        String token = httpRequest.getHeader("Authorization").substring(7);
+        Long userId = jwtUtil.extractUserId(token); // You must implement this
+        request.setUserId(userId);
+        return ResponseEntity.ok(certificateService.generateCertificate(request));
+    }
+
+
+
+
 }

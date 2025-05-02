@@ -13,6 +13,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.io.File;
 import java.net.MalformedURLException;
@@ -26,9 +27,21 @@ import java.util.stream.Collectors;
 public class CertificateServiceImpl implements CertificateService {
 
     private final CertificateRepository repository;
+    private final RestTemplate restTemplate;
+    private final String CONTENT_SERVICE_URL = "http://localhost:8080/contentservice/api/lessons";
 
     @Override
     public CertificateResponse generateCertificate(CertificateRequest request) {
+        // 1. Call content service to check if user completed the course
+        String checkUrl = CONTENT_SERVICE_URL + "/course/" + request.getCourseId()
+                + "/user/" + request.getUserId() + "/is-completed";
+        Boolean isCompleted = restTemplate.getForObject(checkUrl, Boolean.class);
+
+        if (isCompleted == null || !isCompleted) {
+            throw new IllegalStateException("User has not completed the course.");
+        }
+
+        // 2. Continue as before
         String fileName = "cert_" + request.getUserId() + "_" + request.getCourseId() + ".pdf";
         String filePath = "certificates/" + fileName;
 
@@ -54,6 +67,7 @@ public class CertificateServiceImpl implements CertificateService {
                 .filePath(saved.getFilePath())
                 .build();
     }
+
 
     @Override
     public List<CertificateResponse> getCertificatesByUser(Long userId) {
