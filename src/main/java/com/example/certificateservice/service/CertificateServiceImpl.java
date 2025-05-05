@@ -20,6 +20,8 @@ import java.net.MalformedURLException;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -32,26 +34,44 @@ public class CertificateServiceImpl implements CertificateService {
 
     @Override
     public CertificateResponse generateCertificate(CertificateRequest request) {
-        // 1. Call content service to check if user completed the course
-        String checkUrl = CONTENT_SERVICE_URL + "/course/" + request.getCourseId()
-                + "/user/" + request.getUserId() + "/is-completed";
-        Boolean isCompleted = restTemplate.getForObject(checkUrl, Boolean.class);
-
-        if (isCompleted == null || !isCompleted) {
-            throw new IllegalStateException("User has not completed the course.");
+        // 1. Get enrollment info
+        String enrollmentUrl = "http://localhost:8080/enrollmentservice/api/enrollments/" + request.getEnrollmentId();
+        Map<String, Object> enrollment = restTemplate.getForObject(enrollmentUrl, Map.class);
+        if (enrollment == null || !enrollment.containsKey("userId") || !enrollment.containsKey("courseId")) {
+            throw new IllegalStateException("Invalid enrollment response");
         }
 
-        // 2. Continue as before
-        String fileName = "cert_" + request.getUserId() + "_" + request.getCourseId() + ".pdf";
-        String filePath = "certificates/" + fileName;
+        Long userId = Long.valueOf(enrollment.get("userId").toString());
+        Long courseId = Long.valueOf(enrollment.get("courseId").toString());
 
-        PdfGenerator.generate(request.getUserName(), request.getCourseTitle(), filePath);
+
+        // 2. Check if certificate already exists
+        Optional<Certificate> existing = repository.findByUserIdAndCourseId(userId, courseId);
+        if (existing.isPresent()) {
+            throw new IllegalStateException("Certificate already exists.");
+        }
+
+        // 3. Check course completion
+        String checkUrl = "http://localhost:8080/contentservice/api/lessons/course/" + courseId + "/user/" + userId + "/is-complete";
+        Boolean isCompleted = restTemplate.getForObject(checkUrl, Boolean.class);
+        if (isCompleted == null || !isCompleted) {
+            throw new IllegalStateException("Course is not completed.");
+        }
+
+        // 4. Get userName & courseTitle
+        String userName = restTemplate.getForObject("http://localhost:8080/userservice/user/" + userId + "/name", String.class);
+        String courseTitle = restTemplate.getForObject("http://localhost:8080/courseservice/courses/" + courseId + "/title", String.class);
+
+        // 5. Generate PDF
+        String fileName = "cert_" + userId + "_" + courseId + ".pdf";
+        String filePath = "certificates/" + fileName;
+        PdfGenerator.generate(userName, courseTitle, filePath);
 
         Certificate cert = new Certificate();
-        cert.setUserId(request.getUserId());
-        cert.setCourseId(request.getCourseId());
-        cert.setCourseTitle(request.getCourseTitle());
-        cert.setUserName(request.getUserName());
+        cert.setUserId(userId);
+        cert.setCourseId(courseId);
+        cert.setCourseTitle(courseTitle);
+        cert.setUserName(userName);
         cert.setIssueDate(LocalDate.now());
         cert.setFilePath(filePath);
 
@@ -67,6 +87,7 @@ public class CertificateServiceImpl implements CertificateService {
                 .filePath(saved.getFilePath())
                 .build();
     }
+
 
 
     @Override

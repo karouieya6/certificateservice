@@ -40,14 +40,14 @@ public class CertificateController {
         return certificateRepository.countByUserId(userId);
     }
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'INSTRUCTOR')")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<CertificateResponse> generateCertificate(
             @RequestBody CertificateRequest request,
             HttpServletRequest httpRequest
     ) {
         String token = httpRequest.getHeader("Authorization").substring(7);
         Long userId = jwtUtil.extractUserId(token); // You must implement this
-        request.setUserId(userId);
+
         return ResponseEntity.ok(certificateService.generateCertificate(request));
     }
 
